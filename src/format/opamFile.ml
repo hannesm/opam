@@ -1564,6 +1564,8 @@ module Switch_configSyntax = struct
     with Not_found -> None
 
   let wrappers t = t.wrappers
+  let env t = t.env
+  let with_env env t = {t with env}
 
 end
 module Switch_config = struct
