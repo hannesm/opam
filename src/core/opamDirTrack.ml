@@ -65,7 +65,7 @@ let cached_digest =
   fun f size mtime ->
     try
       let csize, cmtime, digest = Hashtbl.find item_cache f in
-      if csize = size || mtime = cmtime then Digest.to_hex digest
+      if csize = size && mtime = cmtime then Digest.to_hex digest
       else raise Not_found
     with Not_found ->
       let digest = Digest.file f in
