@@ -505,8 +505,7 @@ let read_overlays ~repos_roots (read: package -> OpamFile.OPAM.t option) package
     packages
     OpamPackage.Name.Map.empty
 
-let export rt ?(full=false) filename =
-  let switch = OpamStateConfig.get_switch () in
+let export rt ?(full=false) ?(switch=OpamStateConfig.get_switch ()) filename =
   let root = OpamStateConfig.(!r.root_dir) in
   let export =
     OpamFilename.with_flock `Lock_none (OpamPath.Switch.lock root switch)
