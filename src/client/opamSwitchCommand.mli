@@ -47,6 +47,7 @@ val import:
 val export:
   'a repos_state ->
   ?full:bool ->
+  ?switch:switch ->
   OpamFile.SwitchExport.t OpamFile.t option ->
   unit
 

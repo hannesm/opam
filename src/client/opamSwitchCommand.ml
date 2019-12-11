@@ -491,8 +491,7 @@ let import_t ?ask importfile t =
   end;
   t
 
-let export rt ?(full=false) filename =
-  let switch = OpamStateConfig.get_switch () in
+let export rt ?(full=false) ?(switch=OpamStateConfig.get_switch ()) filename =
   let root = OpamStateConfig.(!r.root_dir) in
   let export =
     OpamFilename.with_flock `Lock_none (OpamPath.Switch.lock root switch)
