@@ -477,7 +477,7 @@ let import_t ?ask importfile t =
   end;
   t
 
-let read_overlays ~repos_roots (read: package -> OpamFile.OPAM.t option) packages =
+let read_overlays sd ~repos_roots (read: package -> OpamFile.OPAM.t option) packages =
   OpamPackage.Set.fold (fun nv acc ->
       match read nv with
       | Some opam ->
@@ -500,20 +500,65 @@ let read_overlays ~repos_roots (read: package -> OpamFile.OPAM.t option) package
                 end)
               opam files
         in
-        OpamPackage.Name.Map.add nv.name opam' acc
+        let opam'' =
+          match OpamFile.OPAM.url opam' with
+          | None -> Some opam'
+          | Some url ->
+            let url' = OpamFile.URL.url url in
+            match url'.backend with
+            | `git ->
+              let commit_hash =
+                let dir = sd nv in
+                let cmd =
+                  Printf.sprintf
+                    "cd %s && git log -1 --pretty=format:%%H"
+                    (OpamFilename.Dir.to_string dir)
+                in
+                let input = Unix.open_process_in cmd in
+                let output = input_line input in
+                let _ = Unix.close_process_in input in
+                output
+              in
+              let url'' = { url' with hash = Some commit_hash } in
+              let checksum, mirrors = OpamFile.URL.checksum url, OpamFile.URL.mirrors url in
+              let url''' = OpamFile.URL.create ~mirrors ~checksum url'' in
+              Some (OpamFile.OPAM.with_url url''' opam')
+            | `http ->
+              begin match OpamFile.URL.checksum url with
+                | [] ->
+                  OpamConsole.warning "Ignoring package %s, no checksum"
+                    (OpamPackage.Name.to_string nv.name);
+                  None
+                | _ -> Some opam'
+              end
+            | `rsync ->
+              OpamConsole.warning "Ignoring package %s, which uses an rsync pin"
+                (OpamPackage.Name.to_string nv.name);
+              None
+            | _ ->
+              OpamConsole.warning "Ignoring package %s, which uses an unknown vcs"
+                (OpamPackage.Name.to_string nv.name);
+              None
+        in
+        begin match opam'' with
+          | None -> acc
+          | Some opam'' -> OpamPackage.Name.Map.add nv.name opam'' acc
+        end
       | None -> acc)
     packages
     OpamPackage.Name.Map.empty
 
-let export rt ?(full=false) ?(switch=OpamStateConfig.get_switch ()) filename =
+let export gt rt ?(full=false) ?(switch=OpamStateConfig.get_switch ()) filename =
   let root = OpamStateConfig.(!r.root_dir) in
+  OpamSwitchState.with_ `Lock_none ~rt ~switch gt @@ fun st ->
   let export =
     OpamFilename.with_flock `Lock_none (OpamPath.Switch.lock root switch)
     @@ fun _ ->
     let selections = S.safe_read (OpamPath.Switch.selections root switch) in
     let repos_roots = OpamRepositoryState.get_root rt in
+    let sd = OpamSwitchState.source_dir st in
     let overlays =
-      read_overlays ~repos_roots (fun nv ->
+      read_overlays sd ~repos_roots (fun nv ->
           OpamFileTools.read_opam
             (OpamPath.Switch.Overlay.package root switch nv.name))
         selections.sel_pinned
@@ -521,12 +566,13 @@ let export rt ?(full=false) ?(switch=OpamStateConfig.get_switch ()) filename =
     let overlays =
       if full then
         OpamPackage.Name.Map.union (fun a _ -> a) overlays @@
-        read_overlays ~repos_roots (fun nv ->
+        read_overlays sd ~repos_roots (fun nv ->
             OpamFile.OPAM.read_opt
               (OpamPath.Switch.installed_opam root switch nv))
           (selections.sel_installed -- selections.sel_pinned)
       else overlays
     in
+    OpamSwitchState.drop st;
     { OpamFile.SwitchExport.selections; overlays }
   in
   match filename with

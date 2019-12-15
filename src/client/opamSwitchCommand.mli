@@ -42,7 +42,7 @@ val import:
 (** Export a file which contains the installed packages. If full is specified
     and true, export metadata of all installed packages (excluding overlay
     files) as part of the export. [None] means export to stdout. *)
-val export: 'a repos_state -> ?full:bool -> ?switch:switch ->
+val export: 'a global_state -> 'a repos_state -> ?full:bool -> ?switch:switch ->
   OpamFile.SwitchExport.t OpamFile.t option -> unit
 
 (** Remove the given compiler switch, and returns the updated state (unchanged
