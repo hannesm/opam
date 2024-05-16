@@ -23,10 +23,10 @@
                (:include ../ocaml-context-flags.sexp)
                (:include linking.sexp)))
   (libraries   opam-client
-               (select link-opam-manifest from
-                       (opam-client.manifest -> link-opam-manifest.pull)
-                       (                     -> link-opam-manifest.dummy)
-               )))
+;               (select link-opam-manifest from
+;                       (opam-client.manifest -> link-opam-manifest.pull)
+;                       (                     -> link-opam-manifest.dummy))
+               ))
 
 ; Hack to make the tests work on Cygwin
 (rule
@@ -37,11 +37,11 @@
 (rule
   (with-stdout-to link-opam-manifest.dummy (echo "")))
 
-(rule
-  (targets link-opam-manifest.pull)
-  (deps    (:obj ../manifest/opam-manifest.o))
-  (action  (progn (system "cp %{obj} opam-manifest.o 2> %{null} || copy %{obj} opam-manifest.o")
-                  (with-stdout-to %{targets} (echo "")))))
+;(rule
+;  (targets link-opam-manifest.pull)
+;  (deps    (:obj ../manifest/opam-manifest.o))
+;  (action  (progn (system "cp %{obj} opam-manifest.o 2> %{null} || copy %{obj} opam-manifest.o")
+;                  (with-stdout-to %{targets} (echo "")))))
 
 (rule
   (targets git-sha)

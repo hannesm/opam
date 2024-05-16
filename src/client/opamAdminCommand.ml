@@ -677,7 +677,8 @@ let add_hashes_command cli =
             in
             let has_error, hashes =
               List.fold_left (fun (has_error, hashes) kind ->
-                  if List.exists (fun h -> OpamHash.kind h = kind) hashes
+                  if List.exists (fun h -> OpamHash.kind h = kind) hashes ||
+                     List.exists (fun h -> OpamHash.kind h = `SHA512) hashes
                   then has_error, hashes else
                   match get_hash cache_urls kind hashes
                           (OpamFile.URL.url urlf)
