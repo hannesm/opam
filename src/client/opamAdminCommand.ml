@@ -424,6 +424,118 @@ let update_extrafiles_command cli =
     Term.(const cmd $ global_options cli
           $ hash_type_arg $ packages)
 
+let file_keep_version = [
+"FrontC/opam.patch" ;
+"abella/abella.install" ;
+"afl/add-uninstall-target.patch" ;
+"alt-ergo/alt-ergo.install" ;
+"altgr-ergo/altgr-ergo.install" ;
+"atd/atd.install" ;
+"atdgen/atdgen.install" ;
+"beluga/beluga.install" ;
+"biniou/biniou.install" ;
+"bisect/opam.patch" ;
+"bisect_ppx/bisect_ppx.install" ;
+"bolt/opam.patch" ;
+"bsdowl/remove.sh" ;
+"camlhighlight/sexp-dir.patch.in" ;
+"camlidl/camlidl.install" ;
+"camlp5/camlp5.install" ;
+"camlzip/build_with_trunk.patch" ;
+"camlzip/fix-install.patch" ;
+"cca/cca.install" ;
+"conf-bap-llvm/find-llvm.ml.in" ;
+"conf-binutils/find-binutils.ml.in" ;
+"conf-gmp-powm-sec/test.c" ;
+"conf-gmp/test.c" ;
+"conf-ida/find-ida.ml.in" ;
+"conf-libclang/configure.sh" ;
+"conf-libev/discover.ml" ;
+"conf-libssl/homebrew.sh" ;
+"conf-llvm/configure.sh" ;
+"conf-openblas/test.c" ;
+"coq/CAML_LD_LIBRARY_PATH.patch" ;
+"coq/configure.patch" ;
+"coq/coq.install" ;
+"coq/disable_warn_70.patch" ;
+"coqide/MAKEFILE_remove_useless_for_coqide.patch" ;
+"coqide/coqide.install" ;
+"core/core.install" ;
+"core/fix_META.patch" ;
+"core_extended/fix_META.patch" ;
+"core_extended/openbsd-quota-disable.diff" ;
+"csv/csv.install" ;
+"eigen/eigen.install" ;
+"eliom/eliom.install" ;
+"frama-c/frama-c.install" ;
+"gmp-freestanding/gmp-freestanding.pc" ;
+"gmp-freestanding/mirage-build.sh" ;
+"gmp-xen/mirage-build.sh" ;
+"gpr/gpr.install" ;
+"iocaml/iocaml.install" ;
+"iocamljs-kernel/iocamljs-kernel.install" ;
+"js_of_ocaml/js_of_ocaml.install" ;
+"lablgtk/lablgldir.patch" ;
+"lablgtk3/lablgtk.install" ;
+"lambda-term/lambda-term.install" ;
+"lambdoc/lambdoc.install" ;
+"ledit/ledit.install" ;
+"libres3/libres3.install" ;
+"llvm/META.patch" ;
+"llvm/fix-macos.patch" ;
+"llvm/fix-rhel.patch" ;
+"llvm/fix-shared.patch" ;
+"llvm/install.sh" ;
+"llvm/link-META.patch" ;
+"llvm/link.patch" ;
+"lwt/lwt.install" ;
+"menhir/menhir.install" ;
+"mirage-www/mirage-www.install" ;
+"mldonkey/mldonkey.install" ;
+"mlmpfr/mlmpfr_compatibility_test.c" ;
+"mlmpfr/test.c" ;
+"modelica_ml/modelica.ml.install" ;
+"mpp/mpp.install" ;
+"msgpack/no-camlp4.patch" ;
+"nocrypto/werror.patch" ;
+"num/findlib-install.patch" ;
+"oasis/oasis.install" ;
+"oasis2opam/oasis2opam.install" ;
+"ocaml-base-compiler/PIC.patch" ;
+"ocaml-base-compiler/alt-signal-stack.patch" ;
+"ocaml-base-compiler/fix-gcc10.patch" ;
+"ocaml-base-compiler/pr4867.patch" ;
+"ocaml-config/gen_ocaml_config.ml.in" ;
+"ocaml-variants/add-conditional-compilation.patch" ;
+"ocaml-variants/fix-gcc10.patch" ;
+"ocamlfind/no-awk-check.patch" ;
+"ocamlfind/ocamlfind.install" ;
+"ocamlfind/termux.patch" ;
+"ocamlmod/ocamlmod.install" ;
+"ocp-indent/fix-warn-error.patch" ;
+"ocp-index/ocaml.4.02.patch" ;
+"ocp-index/ocaml.4.03.patch" ;
+"ocsigenserver/fix-gmake-4.3.patch" ;
+"omd/omd.install" ;
+"oranger/compile_ranger.sh" ;
+"ospec/ospec.install" ;
+"ott/ott.install" ;
+"rdbg/rdbg.install" ;
+"stog/stog.install" ;
+"unison/ocaml48.patch" ;
+"unison/unison.install" ;
+"utop/utop.install" ;
+"wall/fix-ocaml-beta.patch" ;
+"why3/Makefile.patch" ;
+"why3/why3.install" ;
+"zarith-freestanding/mirage-build.sh" ;
+"zarith-freestanding/mirage-install.sh" ;
+"zarith-freestanding/mirage-uninstall.sh" ;
+"zarith-freestanding/no-dynlink.patch" ;
+"zarith-xen/mirage-install.sh" ;
+"zarith/z_pp.pl.patch" ;
+]
+
 let migrate_extrafiles_command_doc =
   "Move extra-files to extra-source."
 let migrate_extrafiles_command cli =
@@ -501,8 +613,7 @@ let migrate_extrafiles_command cli =
                      let dir, file =
                        "patches/" ^
                        OpamPackage.name_to_string nv ^
-                       "/" ^ OpamPackage.name_to_string nv ^ "." ^
-                       OpamPackage.version_to_string nv ^ "/",
+                       "/",
                        OpamFilename.Base.to_string base
                      in
                      let dst_dir =
@@ -510,7 +621,75 @@ let migrate_extrafiles_command cli =
                      let dst =
                        OpamFilename.(create dst_dir (Base.of_string file))
                      in
+                     let dir, file, dst =
+                       (* the approach is two-fold:
+                          - if we're in ocaml-variants, we take a sneak peak in ocaml-base-compiler
+                          - we've the file on the list, then we go ahead and use file.package-version
+                          - we don't have the file on the list, then we use foo.N
+                       *)
+                       let pn = OpamPackage.name_to_string nv in
+                       let is_ocaml_variant = String.equal pn "ocaml-variants" in
+                       let r =
+                         if is_ocaml_variant then
+                           let version =
+                             let v = OpamPackage.version_to_string nv in
+                             try
+                               String.sub v 0 (String.index v '+')
+                             with Not_found -> v
+                           in
+                           print_endline ("version is " ^ version);
+                           let looking_at dir file =
+                             try
+                               let dst_dir =
+                                 OpamFilename.Dir.(of_string (Filename.concat (to_string local_dir) dir))
+                               in
+                               let dst = OpamFilename.(create dst_dir (Base.of_string file)) in
+                               if OpamHash.check_file (OpamFilename.to_string dst) hash then
+                                 Some (dir, file, dst)
+                               else
+                                 None
+                             with _ -> None
+                           in
+                           match looking_at "patches/ocaml-base-compiler/" file with
+                           | None ->
+                             let f_with_ver = file ^ "." ^ version in
+                             looking_at "patches/ocaml-base-compiler/" f_with_ver
+                           | Some x -> Some x
+                         else
+                           None
+                       in
+                       match r with
+                       | Some (dir, file, dst) -> dir, file, dst
+                       | None ->
+                       let fn = OpamFilename.Base.to_string base in
+                       let should_keep_version =
+                         String.equal fn "META" ||
+                         List.mem (pn ^ "/" ^ fn) file_keep_version
+                       in
+                       if should_keep_version then
+                         let file = file ^ "." ^ OpamPackage.version_to_string nv in
+                         let dst = OpamFilename.(create dst_dir (Base.of_string file)) in
+                         (dir, file, dst)
+                       else
+                         let rec doit xfile dst n =
+                           if OpamFilename.exists dst then
+                             (* check for same contents *)
+                             if OpamHash.check_file (OpamFilename.to_string dst) hash then
+                               dir, xfile, dst
+                             else begin
+                               let file = file ^ "." ^ string_of_int n in
+                               let dst = OpamFilename.(create dst_dir (Base.of_string file)) in
+                               doit file dst (n + 1)
+                             end
+                           else
+                             dir, xfile, dst
+                         in
+                         doit file dst 1
+                     in
                      (* copy file to dst, remove from files *)
+                     let dst_dir =
+                       OpamFilename.Dir.(of_string (Filename.concat (to_string local_dir) dir))
+                     in
                      OpamFilename.mkdir dst_dir;
                      OpamFilename.copy ~src ~dst;
                      let url = OpamUrl.of_string (url_prefix ^ dir ^ file) in
@@ -520,7 +699,8 @@ let migrate_extrafiles_command cli =
                in
                OpamFilename.cleandir files_dir;
                OpamFilename.rmdir_cleanup files_dir;
-               let opam1 = OpamFile.OPAM.with_extra_sources extra_sources opam in
+               let my_extra_sources = OpamFile.OPAM.extra_sources opam in
+               let opam1 = OpamFile.OPAM.with_extra_sources (my_extra_sources @ extra_sources) opam in
                let opam1 = OpamFile.OPAM.with_extra_files_opt None opam1 in
                OpamFile.OPAM.write_with_preserved_format opam_file opam1;
                has_error)
