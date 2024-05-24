@@ -604,12 +604,29 @@ let migrate_extrafiles_command cli =
              | _ ->
                let hashes =
                  List.map (fun (file, base) ->
+                     let kind, should_md5 = match OpamFile.OPAM.extra_files opam with
+                       | None -> kind, false
+                       | Some things ->
+                         match List.find_opt
+                                 (fun (b, _) -> String.equal (OpamFilename.Base.to_string base) (OpamFilename.Base.to_string b))
+                                 things
+                         with
+                         | None -> kind, false
+                         | Some (_, h) ->
+                           if OpamHash.kind h = `MD5 then (kind, true) else OpamHash.kind h, false
+                     in
                      let xhash = compute ~kind file in
-                     file, base, xhash)
+                     let md5 =
+                       if should_md5 then
+                         Some (compute ~kind:`MD5 file)
+                       else
+                         None
+                     in
+                     file, base, xhash, md5)
                    files
                in
                let extra_sources =
-                 List.map (fun (src, base, hash) ->
+                 List.map (fun (src, base, hash, md5) ->
                      let dir, file =
                        "patches/" ^
                        OpamPackage.name_to_string nv ^
@@ -637,7 +654,6 @@ let migrate_extrafiles_command cli =
                                String.sub v 0 (String.index v '+')
                              with Not_found -> v
                            in
-                           print_endline ("version is " ^ version);
                            let looking_at dir file =
                              try
                                let dst_dir =
@@ -694,7 +710,8 @@ let migrate_extrafiles_command cli =
                      OpamFilename.copy ~src ~dst;
                      let url = OpamUrl.of_string (url_prefix ^ dir ^ file) in
                      let url = OpamFile.URL.create url in
-                     base, OpamFile.URL.with_checksum [hash] url)
+                     let cs = hash :: (match md5 with None -> [] | Some m -> [m]) in
+                     base, OpamFile.URL.with_checksum cs url)
                    hashes
                in
                OpamFilename.cleandir files_dir;
@@ -863,7 +880,7 @@ let add_hashes_command cli =
                   match get_hash cache_urls kind hashes
                           (OpamFile.URL.url urlf)
                   with
-                  | Some h -> has_error, hashes @ [h]
+                  | Some h -> has_error, h :: hashes
                   | None ->
                     OpamConsole.error "Could not get hash for %s: %s"
                       (OpamPackage.to_string nv)
